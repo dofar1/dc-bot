@@ -17,174 +17,138 @@ intents.messages = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+SUMMARY_CHANNEL_ID = 1499443210471342242
+FORUM_NAME = "tsl-worthy-opinions"
+
 @bot.event
 async def on_ready():
     print(f"Bot is online as {bot.user.name} v1.0")
 
+# ---------------- HELPERS ---------------- #
+
 async def get_target_channel():
-    channel = bot.get_channel(1499443210471342242)
+    channel = bot.get_channel(SUMMARY_CHANNEL_ID)
     if channel is None:
         try:
-            channel = await bot.fetch_channel(1499443210471342242)
+            channel = await bot.fetch_channel(SUMMARY_CHANNEL_ID)
         except Exception as exc:
-            print("Target channel not found or fetch failed:", exc)
+            print("Target channel not found:", exc)
             return None
     return channel
 
-async def get_tsl_forum_channel():
-    for guild in bot.guilds:
-        for channel in guild.channels:
-            if channel.name == "tsl-worthy-opinions":
-                return channel
-    return None
-
-async def get_summary_message(target_channel):
-    async for message in target_channel.history(limit=100):
-        if message.author == bot.user and message.content.startswith("TSL:"):
+async def get_summary_message(channel):
+    async for message in channel.history(limit=100):
+        if message.author == bot.user and message.embeds:
             return message
     return None
 
-def format_channel_label(channel):
-    if isinstance(channel, discord.Thread):
-        return f"<#{channel.id}>"
-    return channel.mention
+def is_tsl_thread(channel):
+    return isinstance(channel, discord.Thread) and channel.parent and channel.parent.name == FORUM_NAME
 
-async def update_summary_line(channel):
-    target_channel = await get_target_channel()
-    if target_channel is None:
-        return
-
-    if channel.id == target_channel.id:
-        return
-
+async def count_pins(thread):
     counts = {"RA": 0, "RR": 0, "FA": 0, "FR": 0}
-    async for msg in channel.pins():
-        content = (msg.content or "").lower()
-        counts["RA"] += int("reliable accept" in content)
-        counts["RR"] += int("reliable reject" in content)
-        counts["FA"] += int("feedback accept" in content)
-        counts["FR"] += int("feedback reject" in content)
 
-    summary_header = "TSL:"
-    channel_label = format_channel_label(channel)
-    new_line = (
-        f"{channel_label}: RA {counts['RA']} | RR {counts['RR']} | FA {counts['FA']} | FR {counts['FR']}"
+    async for msg in thread.pins():
+        content = (msg.content or "").lower()
+        counts["RA"] += content.count("reliable accept")
+        counts["RR"] += content.count("reliable reject")
+        counts["FA"] += content.count("feedback accept")
+        counts["FR"] += content.count("feedback reject")
+
+    return counts
+
+def build_embed(data):
+    embed = discord.Embed(
+        title="TSL Opinions",
+        color=discord.Color.blue()
     )
 
-    summary_message = await get_summary_message(target_channel)
-    if summary_message is None:
-        await target_channel.send(f"{summary_header}\n{new_line}")
-        return
+    if not data:
+        embed.description = "No active threads."
+        return embed
 
-    lines = summary_message.content.splitlines()
-    channel_label = format_channel_label(channel)
-    found = False
-    for i in range(1, len(lines)):
-        if lines[i].startswith(f"{channel_label}:"):
-            lines[i] = new_line
-            found = True
-            break
-    if not found:
-        lines.append(new_line)
+    # 🔥 SORTING (RA first, then FA)
+    sorted_data = sorted(
+        data.items(),
+        key=lambda x: (x[1]["RA"], x[1]["FA"]),
+        reverse=True
+    )
 
-    await summary_message.edit(content="\n".join(lines))
+    for thread, counts in sorted_data:
+        embed.add_field(
+            name=f"{thread.mention}",
+            value=(
+                f"**Reliables:** ✅ {counts['RA']} | ❌ {counts['RR']}\n"
+                f"**Feedbacks:** ✅ {counts['FA']} | ❌ {counts['FR']}"
+            ),
+            inline=False
+        )
 
-async def remove_summary_line(channel):
+    return embed
+
+# ---------------- CORE UPDATE ---------------- #
+
+async def update_summary():
     target_channel = await get_target_channel()
     if target_channel is None:
         return
 
+    data = {}
+
+    for guild in bot.guilds:
+        for thread in guild.threads:
+            if not is_tsl_thread(thread):
+                continue
+            if thread.id == SUMMARY_CHANNEL_ID:
+                continue
+            if thread.archived or thread.locked:
+                continue
+
+            counts = await count_pins(thread)
+            data[thread] = counts
+
+    embed = build_embed(data)
+
     summary_message = await get_summary_message(target_channel)
-    if summary_message is None:
-        return
 
-    lines = summary_message.content.splitlines()
-    channel_label = format_channel_label(channel)
-    new_lines = [lines[0]] + [line for line in lines[1:] if not line.startswith(f"{channel_label}:")]
-    if len(new_lines) == len(lines):
-        return
+    if summary_message:
+        await summary_message.edit(embed=embed)
+    else:
+        await target_channel.send(embed=embed)
 
-    await summary_message.edit(content="\n".join(new_lines) if len(new_lines) > 1 else new_lines[0])
+# ---------------- EVENTS ---------------- #
 
 @bot.event
 async def on_guild_channel_pins_update(channel, last_pin):
-    is_tsl_forum = False
-    if isinstance(channel, discord.Thread):
-        is_tsl_forum = channel.parent is not None and channel.parent.name == "tsl-worthy-opinions"
-    else:
-        is_tsl_forum = channel.name == "tsl-worthy-opinions"
-
-    if not is_tsl_forum:
-        return
-
-    if channel.id == 1499443210471342242:
-        return
-
-    await update_summary_line(channel)
+    if is_tsl_thread(channel):
+        await update_summary()
 
 @bot.event
 async def on_thread_create(thread):
-    if thread.parent is None or thread.parent.name != "tsl-worthy-opinions":
-        return
-    await update_summary_line(thread)
+    if is_tsl_thread(thread):
+        await update_summary()
 
 @bot.event
 async def on_thread_update(before, after):
-    if after.parent is None or after.parent.name != "tsl-worthy-opinions":
-        return
-
-    was_closed = before.locked or before.archived
-    is_closed = after.locked or after.archived
-    if was_closed and not is_closed:
-        await update_summary_line(after)
-    elif is_closed and not was_closed:
-        await remove_summary_line(after)
+    if is_tsl_thread(after):
+        await update_summary()
 
 @bot.event
 async def on_guild_channel_delete(channel):
-    if isinstance(channel, discord.Thread) and channel.parent is not None and channel.parent.name == "tsl-worthy-opinions":
-        await remove_summary_line(channel)
+    if is_tsl_thread(channel):
+        await update_summary()
+
+# ---------------- COMMAND ---------------- #
 
 @bot.command(name="refresh")
 async def refresh_summary(ctx):
-    forum_channel = await get_tsl_forum_channel()
-    if forum_channel is None:
-        await ctx.send("Could not find the `tsl-worthy-opinions` forum channel.")
-        return
+    await update_summary()
 
-    target_channel = await get_target_channel()
-    if target_channel is None:
-        await ctx.send("Could not find the summary target channel.")
-        return
-
-    summary_message = await get_summary_message(target_channel)
-    summary_header = "TSL:"
-    lines = [summary_header]
-
-    threads = [thread for thread in ctx.guild.threads if thread.parent_id == forum_channel.id and not thread.locked and not thread.archived and thread.id != target_channel.id]
-    for thread in sorted(threads, key=lambda t: t.name.lower()):
-        counts = {"RA": 0, "RR": 0, "FA": 0, "FR": 0}
-        async for msg in thread.pins():
-            content = (msg.content or "").lower()
-            counts["RA"] += int("reliable accept" in content)
-            counts["RR"] += int("reliable reject" in content)
-            counts["FA"] += int("feedback accept" in content)
-            counts["FR"] += int("feedback reject" in content)
-
-        channel_label = format_channel_label(thread)
-        lines.append(
-            f"{channel_label}: RA {counts['RA']} | RR {counts['RR']} | FA {counts['FA']} | FR {counts['FR']}"
-        )
-
-    content = "\n".join(lines)
-    if summary_message is None:
-        await target_channel.send(content)
-    else:
-        await summary_message.edit(content=content)
-
-    msg = await ctx.send("Refreshed")
+    msg = await ctx.send("Refreshed ✅")
     await asyncio.sleep(3)
     await msg.delete()
     await ctx.message.delete()
+
+# ---------------- RUN ---------------- #
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
