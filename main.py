@@ -3,7 +3,7 @@ from discord.ext import commands
 import logging
 from dotenv import load_dotenv
 import os
-import asyncio
+from keep_alive import keep_alive
 
 load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
@@ -12,17 +12,22 @@ handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w'
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True
-intents.messages = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-SUMMARY_CHANNEL_ID = 1499443210471342242
-FORUM_NAME = "tsl-worthy-opinions"
-
 @bot.event
 async def on_ready():
-    print(f"Bot is online as {bot.user.name} v1.0")
+    print(f"Bot is online as {bot.user.name}")
+
+@bot.command()
+async def ping(ctx):
+    await ctx.send("pong")
+
+# 🔥 START FLASK SERVER
+keep_alive()
+
+# 🔥 START BOT
+bot.run(token, log_handler=handler, log_level=logging.DEBUG)
 
 # ---------------- HELPERS ---------------- #
 
