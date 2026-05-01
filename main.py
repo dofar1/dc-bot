@@ -138,13 +138,14 @@ async def on_guild_channel_delete(channel):
 
 # commands
 
-@bot.tree.command(name="refresh", description="Refresh the TSL Opinion Summary")
-async def refresh(interaction: discord.Interaction):
-    await interaction.response.defer()
-
+@bot.command(name="refresh")
+async def refresh_summary(ctx):
     await update_summary()
 
-    await interaction.followup.send("Refreshed ✅", ephemeral=True)
+    msg = await ctx.send("Refreshed ✅")
+    await asyncio.sleep(3)
+    await msg.delete()
+    await ctx.message.delete()
 
 # flask server
 keep_alive()
