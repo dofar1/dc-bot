@@ -3,6 +3,7 @@ from discord.ext import commands
 import logging
 from dotenv import load_dotenv
 import os
+import asyncio
 from keep_alive import keep_alive
 
 load_dotenv()
@@ -15,6 +16,9 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+SUMMARY_CHANNEL_ID = 1499443210471342242
+FORUM_NAME = "tsl-worthy-opinions"
+
 @bot.event
 async def on_ready():
     print(f"Bot is online as {bot.user.name}")
@@ -22,12 +26,6 @@ async def on_ready():
 @bot.command()
 async def ping(ctx):
     await ctx.send("pong")
-
-# 🔥 START FLASK SERVER
-keep_alive()
-
-# 🔥 START BOT
-bot.run(token, log_handler=handler, log_level=logging.DEBUG)
 
 # ---------------- HELPERS ---------------- #
 
@@ -72,7 +70,6 @@ def build_embed(data):
         embed.description = "No active threads."
         return embed
 
-    # 🔥 SORTING (RA first, then FA)
     sorted_data = sorted(
         data.items(),
         key=lambda x: (x[1]["RA"], x[1]["FA"]),
@@ -154,6 +151,8 @@ async def refresh_summary(ctx):
     await msg.delete()
     await ctx.message.delete()
 
-# ---------------- RUN ---------------- #
+# START FLASK SERVER
+keep_alive()
 
+# RUN BOT (ONLY ONCE, AT VERY END)
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
