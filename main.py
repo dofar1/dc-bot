@@ -14,7 +14,9 @@ handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w'
 intents = discord.Intents.default()
 intents.message_content = True
 
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = commands.Bot(command_prefix='/', intents=intents)
+
+COMMAND_ROLE = 1499803285056393417
 
 FORUM_NAME = "tsl-worthy-opinions"
 SUMMARY_CHANNEL_ID = 1499443210471342242
@@ -136,16 +138,24 @@ async def on_guild_channel_delete(channel):
     if is_tsl_thread(channel):
         await update_summary()
 
+
+
 # commands
 
-@bot.command(name="refresh")
-async def refresh_summary(ctx):
+@bot.tree.command(name="refresh", description="Refresh the TSL summary")
+async def refresh(interaction: discord.Interaction):
+
+    if not any(role.id == COMMAND_ROLE for role in interaction.user.roles):
+        await interaction.response.send_message(
+            "You don’t have permission to use this command.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.defer(ephemeral=True)
     await update_summary()
 
-    msg = await ctx.send("Refreshed ✅")
-    await asyncio.sleep(3)
-    await msg.delete()
-    await ctx.message.delete()
+    await interaction.followup.send("Refreshed ✅", ephemeral=True)
 
 # flask server
 keep_alive()
