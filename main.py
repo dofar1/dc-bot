@@ -16,18 +16,14 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-SUMMARY_CHANNEL_ID = 1499443210471342242
 FORUM_NAME = "tsl-worthy-opinions"
+SUMMARY_CHANNEL_ID = 1499443210471342242
 
 @bot.event
 async def on_ready():
     print(f"Bot is online as {bot.user.name}")
 
-@bot.command()
-async def ping(ctx):
-    await ctx.send("pong")
-
-# ---------------- HELPERS ---------------- #
+# helpers
 
 async def get_target_channel():
     channel = bot.get_channel(SUMMARY_CHANNEL_ID)
@@ -88,7 +84,7 @@ def build_embed(data):
 
     return embed
 
-# ---------------- CORE UPDATE ---------------- #
+# logic
 
 async def update_summary():
     target_channel = await get_target_channel()
@@ -118,7 +114,7 @@ async def update_summary():
     else:
         await target_channel.send(embed=embed)
 
-# ---------------- EVENTS ---------------- #
+# events
 
 @bot.event
 async def on_guild_channel_pins_update(channel, last_pin):
@@ -140,19 +136,17 @@ async def on_guild_channel_delete(channel):
     if is_tsl_thread(channel):
         await update_summary()
 
-# ---------------- COMMAND ---------------- #
+# commands
 
-@bot.command(name="refresh")
-async def refresh_summary(ctx):
+@bot.tree.command(name="refresh", description="Refresh the TSL Opinion Summary")
+async def refresh(interaction: discord.Interaction):
+    await interaction.response.defer()
+
     await update_summary()
 
-    msg = await ctx.send("Refreshed ✅")
-    await asyncio.sleep(3)
-    await msg.delete()
-    await ctx.message.delete()
+    await interaction.followup.send("Refreshed ✅", ephemeral=True)
 
-# START FLASK SERVER
+# flask server
 keep_alive()
 
-# RUN BOT (ONLY ONCE, AT VERY END)
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
