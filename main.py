@@ -16,10 +16,10 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix='/', intents=intents)
 
-COMMAND_ROLE = 1499803285056393417
+COMMAND_ROLE = 951477680245731408
 
-FORUM_NAME = "tsl-worthy-opinions"
-SUMMARY_CHANNEL_ID = 1499443210471342242
+FORUM_ID = 1132608152660103199
+SUMMARY_CHANNEL_ID = 1132608904522637322
 
 @bot.event
 async def on_ready():
@@ -44,7 +44,11 @@ async def get_summary_message(channel):
     return None
 
 def is_tsl_thread(channel):
-    return isinstance(channel, discord.Thread) and channel.parent and channel.parent.name == FORUM_NAME
+    return (
+        isinstance(channel, discord.Thread)
+        and channel.parent
+        and channel.parent.id == FORUM_ID
+    )
 
 async def count_pins(thread):
     counts = {"RA": 0, "RR": 0, "FA": 0, "FR": 0}
