@@ -21,9 +21,17 @@ COMMAND_ROLE = 951477680245731408
 FORUM_ID = 1132608152660103199
 SUMMARY_CHANNEL_ID = 1132608904522637322
 
+GUILD_ID = 713151800932433972
+
 @bot.event
 async def on_ready():
-    print(f"Bot is online as {bot.user.name}")
+    guild = discord.Object(id=GUILD_ID)
+
+    bot.tree.copy_global_to(guild=guild)
+    synced = await bot.tree.sync(guild=guild)
+
+    print(f"Synced {len(synced)} commands to guild.")
+    print(f"Bot is online as {bot.user}")
 
 # helpers
 
@@ -160,6 +168,25 @@ async def refresh(interaction: discord.Interaction):
     await update_summary()
 
     await interaction.followup.send("Refreshed ✅", ephemeral=True)
+
+# joke command
+
+@bot.tree.command(name="humble", description="Opinions Manager, humble him.")
+async def humble(interaction: discord.Interaction, message: str):
+
+    if not any(role.id == COMMAND_ROLE for role in interaction.user.roles):
+        await interaction.response.send_message(
+            "You don’t have permission to use this command.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.send_message("Sent ✅", ephemeral=True)
+
+    await interaction.channel.send(message)
+
+
+
 
 # flask server
 keep_alive()
